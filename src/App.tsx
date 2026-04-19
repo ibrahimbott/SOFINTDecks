@@ -192,13 +192,14 @@ export default function App() {
           )}
 
           {viewMode === 'present' && pdfFile && (
-            <div className="w-full h-[85vh] transition-all duration-300">
+            <div className={isClientView ? "fixed inset-0 z-50 bg-black dark:bg-black" : "w-full h-[85vh] transition-all duration-300"}>
               <Viewer 
                 file={pdfFile}
                 deletedPages={deletedPages}
                 onClose={handleClosePresentation} 
                 isDarkMode={isDarkMode}
                 toggleDarkMode={() => setIsDarkMode(!isDarkMode)}
+                isSharedView={isClientView}
               />
             </div>
           )}
