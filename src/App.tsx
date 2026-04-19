@@ -2,11 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { Upload } from './components/Upload';
 import { Editor } from './components/Editor';
 import { Viewer } from './components/Viewer';
-import { Moon, Sun, Presentation, Loader2 } from 'lucide-react';
+import { AdminLogin } from './components/AdminLogin';
+import { AdminDashboard } from './components/AdminDashboard';
+import { Moon, Sun, Presentation, Loader2, Shield } from 'lucide-react';
 import { cn } from './lib/utils';
 import { supabase } from './lib/supabase';
 
-type ViewMode = 'upload' | 'edit' | 'present' | 'loading';
+type ViewMode = 'upload' | 'edit' | 'present' | 'loading' | 'admin-login' | 'admin-dashboard';
 
 export default function App() {
   const [viewMode, setViewMode] = useState<ViewMode>('upload');
@@ -14,6 +16,8 @@ export default function App() {
   const [deletedPages, setDeletedPages] = useState<Set<number>>(new Set());
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [cloudError, setCloudError] = useState<string | null>(null);
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [activeProjectTitle, setActiveProjectTitle] = useState<string>('');
 
   useEffect(() => {
     // Check system preference on initial load
@@ -22,46 +26,49 @@ export default function App() {
     }
   }, []);
 
+  const loadCloudProject = async (projectId: string, mode: 'present' | 'edit') => {
+    setViewMode('loading');
+    setCloudError(null);
+    try {
+      // Fetch project metadata
+      const { data: projectRow, error: projectError } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('id', projectId)
+        .single();
+
+      if (projectError || !projectRow) throw new Error("Presentation not found.");
+
+      // Download PDF
+      const { data: fileData, error: fileError } = await supabase.storage
+        .from('presentations')
+        .download(projectRow.file_path);
+
+      if (fileError || !fileData) throw new Error("Could not download the presentation file.");
+
+      const file = new File([fileData], projectRow.title || "presentation.pdf", { type: "application/pdf" });
+
+      setPdfFile(file);
+      setDeletedPages(new Set(projectRow.deleted_pages || []));
+      setActiveProjectId(projectId);
+      setActiveProjectTitle(projectRow.title || "Untitled Presentation");
+      setViewMode(mode);
+
+    } catch (error: any) {
+      console.error("Cloud load error:", error);
+      setCloudError(error.message);
+      setViewMode('upload');
+    }
+  };
+
   useEffect(() => {
-    const loadCloudProject = async () => {
-      const params = new URLSearchParams(window.location.search);
-      const projectId = params.get('project');
-      if (!projectId) return;
-
-      setViewMode('loading');
-      try {
-        // Fetch project metadata
-        const { data: projectRow, error: projectError } = await supabase
-          .from('projects')
-          .select('*')
-          .eq('id', projectId)
-          .single();
-
-        if (projectError || !projectRow) throw new Error("Presentation not found.");
-
-        // Download PDF
-        const { data: fileData, error: fileError } = await supabase.storage
-          .from('presentations')
-          .download(projectRow.file_path);
-
-        if (fileError || !fileData) throw new Error("Could not download the presentation file. Ensure the backend SQL was run.");
-
-        const file = new File([fileData], "presentation.pdf", { type: "application/pdf" });
-
-        setPdfFile(file);
-        setDeletedPages(new Set(projectRow.deleted_pages || []));
-        setViewMode('present');
-
-      } catch (error: any) {
-        console.error("Cloud load error:", error);
-        setCloudError(error.message);
-        setViewMode('upload');
-      } finally {
+    const params = new URLSearchParams(window.location.search);
+    const projectId = params.get('project');
+    if (projectId) {
+      loadCloudProject(projectId, 'present').finally(() => {
         window.history.replaceState({}, document.title, window.location.pathname);
-      }
-    };
-
-    loadCloudProject();
+      });
+    }
   }, []);
 
   useEffect(() => {
@@ -74,6 +81,9 @@ export default function App() {
 
   const handleUpload = (file: File) => {
     setPdfFile(file);
+    setDeletedPages(new Set());
+    setActiveProjectId(null);
+    setActiveProjectTitle('');
     setViewMode('edit');
   };
 
@@ -88,6 +98,7 @@ export default function App() {
 
   const handleCancelEdit = () => {
     setPdfFile(null);
+    setActiveProjectId(null);
     setViewMode('upload');
   };
 
@@ -95,22 +106,31 @@ export default function App() {
     <div className="min-h-screen bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100 transition-colors duration-300 flex flex-col font-sans mb-0">
       {/* Header */}
       {viewMode !== 'present' && (
-        <header className="flex-none px-6 py-4 bg-white border-b border-gray-200 dark:bg-gray-900 dark:border-gray-800">
+        <header className="flex-none px-6 py-4 bg-white border-b border-gray-200 dark:bg-gray-900 dark:border-gray-800 shadow-sm">
           <div className="max-w-7xl mx-auto flex items-center justify-between">
             <div className="flex items-center space-x-2">
-              <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center shadow-inner">
+              <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center shadow-inner cursor-pointer" onClick={() => setViewMode('upload')}>
                 <Presentation className="text-white w-6 h-6" />
               </div>
               <h1 className="text-xl font-bold tracking-tight">SOFINT<span className="font-light">Decks</span></h1>
             </div>
             
-            <button
-              onClick={() => setIsDarkMode(!isDarkMode)}
-              className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-              aria-label="Toggle dark mode"
-            >
-              {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-            </button>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setViewMode('admin-login')}
+                className="flex items-center px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition"
+              >
+                <Shield className="w-4 h-4 mr-2" />
+                Admin
+              </button>
+              <button
+                onClick={() => setIsDarkMode(!isDarkMode)}
+                className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                aria-label="Toggle dark mode"
+              >
+                {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+              </button>
+            </div>
           </div>
         </header>
       )}
@@ -137,6 +157,24 @@ export default function App() {
               <Upload onUpload={handleUpload} />
             </div>
           )}
+
+          {viewMode === 'admin-login' && (
+             <div className="w-full flex items-center justify-center">
+                <AdminLogin 
+                  onLogin={() => setViewMode('admin-dashboard')} 
+                  onCancel={() => setViewMode('upload')} 
+                />
+             </div>
+          )}
+
+          {viewMode === 'admin-dashboard' && (
+             <div className="w-full flex-1 flex flex-col min-h-[70vh]">
+                <AdminDashboard 
+                  onLogout={() => setViewMode('upload')} 
+                  onEditProject={(id) => loadCloudProject(id, 'edit')} 
+                />
+             </div>
+          )}
           
           {viewMode === 'edit' && pdfFile && (
             <div className="w-full flex-1 flex flex-col min-h-[70vh] bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800">
@@ -145,6 +183,8 @@ export default function App() {
                 onPresent={handleStartPresentation} 
                 onCancel={handleCancelEdit} 
                 initialDeletedPages={deletedPages}
+                existingProjectId={activeProjectId}
+                initialTitle={activeProjectTitle}
               />
             </div>
           )}

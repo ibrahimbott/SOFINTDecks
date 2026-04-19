@@ -16,13 +16,16 @@ interface EditorProps {
   onPresent: (deleted: Set<number>) => void;
   onCancel: () => void;
   initialDeletedPages?: Set<number>;
+  existingProjectId?: string | null;
+  initialTitle?: string;
 }
 
-export function Editor({ file, onPresent, onCancel, initialDeletedPages }: EditorProps) {
+export function Editor({ file, onPresent, onCancel, initialDeletedPages, existingProjectId, initialTitle }: EditorProps) {
   const [numPages, setNumPages] = useState<number>(0);
   const [deletedPages, setDeletedPages] = useState<Set<number>>(initialDeletedPages || new Set());
   const [isProcessing, setIsProcessing] = useState(false);
   const [fileUrl, setFileUrl] = useState<string>('');
+  const [title, setTitle] = useState(initialTitle || 'Untitled Presentation');
 
   const [isPublishing, setIsPublishing] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
@@ -58,35 +61,51 @@ export function Editor({ file, onPresent, onCancel, initialDeletedPages }: Edito
     setIsPublishing(true);
     setShareUrl(null);
     try {
-      const fileName = `${crypto.randomUUID()}.pdf`;
+      let projectId = existingProjectId;
 
-      // 1. Upload to Storage
-      const { error: uploadError } = await supabase.storage
-        .from('presentations')
-        .upload(fileName, file);
+      if (existingProjectId) {
+         // UPDATE Mode (Admin edit)
+         const { error: updateError } = await supabase
+            .from('projects')
+            .update({
+               deleted_pages: Array.from(deletedPages),
+               title: title
+            })
+            .eq('id', existingProjectId);
+         
+         if (updateError) throw updateError;
+      } else {
+         // INSERT Mode (New Upload)
+         const fileName = `${crypto.randomUUID()}.pdf`;
 
-      if (uploadError) throw uploadError;
+         const { error: uploadError } = await supabase.storage
+           .from('presentations')
+           .upload(fileName, file);
 
-      // 2. Insert into PostgreSQL
-      const deletedArray = Array.from(deletedPages);
-      const { data: projectData, error: insertError } = await supabase
-        .from('projects')
-        .insert({
-          file_path: fileName,
-          deleted_pages: deletedArray
-        })
-        .select('id')
-        .single();
+         if (uploadError) throw uploadError;
 
-      if (insertError || !projectData) throw insertError;
+         const deletedArray = Array.from(deletedPages);
+         const { data: projectData, error: insertError } = await supabase
+           .from('projects')
+           .insert({
+             file_path: fileName,
+             deleted_pages: deletedArray,
+             title: title
+           })
+           .select('id')
+           .single();
+
+         if (insertError || !projectData) throw insertError;
+         projectId = projectData.id;
+      }
 
       // 3. Construct URL
-      const url = `${window.location.origin}?project=${projectData.id}`;
+      const url = `${window.location.origin}?project=${projectId}`;
       setShareUrl(url);
 
     } catch (error: any) {
       console.error("Publish error:", error);
-      alert("Failed to save. Did you remember to run the SQL snippet in your Supabase dashboard?");
+      alert("Failed to save. Did you remember to run the SQL snippet in your Supabase dashboard? Note: For Edits, you must upgrade the SQL table.");
     } finally {
       setIsPublishing(false);
     }
@@ -103,9 +122,15 @@ export function Editor({ file, onPresent, onCancel, initialDeletedPages }: Edito
   return (
     <div className="flex flex-col h-full max-h-[80vh]">
       <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Prepare Slides</h2>
-          <p className="text-gray-500 dark:text-gray-400">Select pages to skip or keep in your presentation.</p>
+        <div className="flex-1 mr-4">
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Presentation Title"
+            className="text-2xl font-bold text-gray-900 dark:text-white bg-transparent border-b-2 border-transparent hover:border-gray-200 dark:hover:border-gray-700 focus:border-blue-500 dark:focus:border-blue-500 outline-none w-full max-w-md transition-colors placeholder-gray-400 dark:placeholder-gray-600 pb-1"
+          />
+          <p className="text-gray-500 dark:text-gray-400 mt-1">Select pages to skip or keep in your presentation.</p>
         </div>
         <div className="flex items-center space-x-3">
           <button
