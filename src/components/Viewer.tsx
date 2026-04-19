@@ -25,13 +25,91 @@ export function Viewer({ file, deletedPages, onClose, isDarkMode, toggleDarkMode
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [renderWindow, setRenderWindow] = useState<number[]>([]);
   const [downloadUrl, setDownloadUrl] = useState<string>('');
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const url = URL.createObjectURL(file);
-    setDownloadUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [file]);
+    if (!isSharedView) {
+      const objectUrl = URL.createObjectURL(file);
+      setDownloadUrl(objectUrl);
+      return () => URL.revokeObjectURL(objectUrl);
+    }
+  }, [file, isSharedView]);
+
+  const handleDownload = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (isGeneratingPdf) return;
+    
+    // If it's already generated and cached in state, just download it
+    if (downloadUrl) {
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = "Presentation.pdf";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      return;
+    }
+
+    setIsGeneratingPdf(true);
+    try {
+      const { PDFDocument, rgb, StandardFonts } = await import('pdf-lib');
+      
+      const arrayBuffer = await file.arrayBuffer();
+      const pdfDoc = await PDFDocument.load(arrayBuffer);
+      const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+      
+      const totalPages = pdfDoc.getPageCount();
+      
+      // Remove deleted pages iteratively backwards to preserve index alignment!
+      for (let i = totalPages - 1; i >= 0; i--) {
+        if (deletedPages.has(i)) {
+          pdfDoc.removePage(i);
+        }
+      }
+      
+      // Add watermark to remaining pages
+      const pages = pdfDoc.getPages();
+      pages.forEach((page) => {
+        const { width } = page.getSize();
+        page.drawText('SOFINT', {
+          x: width - 85,
+          y: 20,
+          size: 16,
+          font: font,
+          color: rgb(0.5, 0.5, 0.5),
+          opacity: 0.35,
+        });
+      });
+      
+      const pdfBytes = await pdfDoc.save();
+      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+      const newUrl = URL.createObjectURL(blob);
+      setDownloadUrl(newUrl);
+      
+      // Trigger download
+      const a = document.createElement('a');
+      a.href = newUrl;
+      a.download = "Presentation.pdf";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      
+    } catch (err) {
+      console.error('Error generating PDF:', err);
+      // Fallback to original file
+      const originalUrl = URL.createObjectURL(file);
+      setDownloadUrl(originalUrl);
+      const a = document.createElement('a');
+      a.href = originalUrl;
+      a.download = "Presentation.pdf";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
 
   function onDocumentLoadSuccess({ numPages }: { numPages: number }) {
     setNumPages(numPages);
@@ -140,19 +218,19 @@ export function Viewer({ file, deletedPages, onClose, isDarkMode, toggleDarkMode
         </div>
         <div className="flex items-center space-x-2">
           {isSharedView && (
-            <a
-              href={downloadUrl}
-              download="Presentation.pdf"
+            <button
+              onClick={handleDownload}
               className={cn(
                 "p-2 rounded-full transition-colors",
                 isFullscreen 
                   ? "text-white hover:bg-white/20" 
-                  : "text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800"
+                  : "text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800",
+                isGeneratingPdf ? "opacity-30 cursor-wait" : ""
               )}
               title="Download PDF Presentation"
             >
-              <Download className="w-5 h-5" />
-            </a>
+              <Download className={cn("w-5 h-5", isGeneratingPdf && "animate-pulse")} />
+            </button>
           )}
           <button
             onClick={toggleDarkMode}
@@ -252,6 +330,15 @@ export function Viewer({ file, deletedPages, onClose, isDarkMode, toggleDarkMode
           <ChevronRight className="w-8 h-8" />
         </button>
       </div>
+
+      {/* Visual Screen Watermark */}
+      {isSharedView && (
+        <div className="absolute bottom-6 right-8 z-30 pointer-events-none select-none opacity-[0.35] mix-blend-difference flex items-center">
+          <span className="text-xl font-bold tracking-tight text-white drop-shadow-md">
+            SOFINT<span className="font-light">Decks</span>
+          </span>
+        </div>
+      )}
 
       {/* Bottom Counter */}
       <div className={cn(
