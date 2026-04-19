@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
-import { ChevronLeft, ChevronRight, Maximize2, Minimize2, X, Sun, Moon } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Maximize2, Minimize2, X, Sun, Moon, Download } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 // Configure the worker to use the local Vite-bundled version for instant caching
@@ -15,15 +15,23 @@ interface ViewerProps {
   onClose: () => void;
   isDarkMode: boolean;
   toggleDarkMode: () => void;
+  isSharedView?: boolean;
 }
 
-export function Viewer({ file, deletedPages, onClose, isDarkMode, toggleDarkMode }: ViewerProps) {
+export function Viewer({ file, deletedPages, onClose, isDarkMode, toggleDarkMode, isSharedView }: ViewerProps) {
   const [numPages, setNumPages] = useState<number>(0);
   const [validPages, setValidPages] = useState<number[]>([]);
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [renderWindow, setRenderWindow] = useState<number[]>([]);
+  const [downloadUrl, setDownloadUrl] = useState<string>('');
   const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const url = URL.createObjectURL(file);
+    setDownloadUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
 
   function onDocumentLoadSuccess({ numPages }: { numPages: number }) {
     setNumPages(numPages);
@@ -115,18 +123,37 @@ export function Viewer({ file, deletedPages, onClose, isDarkMode, toggleDarkMode
         "absolute top-0 left-0 right-0 z-20 flex items-center justify-between p-4 transition-opacity",
         isFullscreen ? "opacity-0 hover:opacity-100 bg-gradient-to-b from-black/60 to-transparent" : "bg-transparent"
       )}>
-        <button
-          onClick={onClose}
-          className={cn(
-            "p-2 rounded-full transition-colors",
-            isFullscreen 
-              ? "text-white hover:bg-white/20" 
-              : "text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800"
+        <div>
+          {!isSharedView && (
+            <button
+              onClick={onClose}
+              className={cn(
+                "p-2 rounded-full transition-colors",
+                isFullscreen 
+                  ? "text-white hover:bg-white/20" 
+                  : "text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800"
+              )}
+            >
+              <X className="w-6 h-6" />
+            </button>
           )}
-        >
-          <X className="w-6 h-6" />
-        </button>
+        </div>
         <div className="flex items-center space-x-2">
+          {isSharedView && (
+            <a
+              href={downloadUrl}
+              download="Presentation.pdf"
+              className={cn(
+                "p-2 rounded-full transition-colors",
+                isFullscreen 
+                  ? "text-white hover:bg-white/20" 
+                  : "text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800"
+              )}
+              title="Download PDF Presentation"
+            >
+              <Download className="w-5 h-5" />
+            </a>
+          )}
           <button
             onClick={toggleDarkMode}
             className={cn(

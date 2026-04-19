@@ -18,19 +18,12 @@ export default function App() {
   const [cloudError, setCloudError] = useState<string | null>(null);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [activeProjectTitle, setActiveProjectTitle] = useState<string>('');
-
-  useEffect(() => {
-    // Check system preference on initial load
-    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      setIsDarkMode(true);
-    }
-  }, []);
+  const [isClientView, setIsClientView] = useState(false);
 
   const loadCloudProject = async (projectId: string, mode: 'present' | 'edit') => {
     setViewMode('loading');
     setCloudError(null);
     try {
-      // Fetch project metadata
       const { data: projectRow, error: projectError } = await supabase
         .from('projects')
         .select('*')
@@ -39,7 +32,6 @@ export default function App() {
 
       if (projectError || !projectRow) throw new Error("Presentation not found.");
 
-      // Download PDF
       const { data: fileData, error: fileError } = await supabase.storage
         .from('presentations')
         .download(projectRow.file_path);
@@ -53,7 +45,6 @@ export default function App() {
       setActiveProjectId(projectId);
       setActiveProjectTitle(projectRow.title || "Untitled Presentation");
       setViewMode(mode);
-
     } catch (error: any) {
       console.error("Cloud load error:", error);
       setCloudError(error.message);
@@ -62,13 +53,29 @@ export default function App() {
   };
 
   useEffect(() => {
+    // Hidden Secret Admin Route
+    if (window.location.pathname === '/admin' || window.location.pathname === '/admin/') {
+      setViewMode('admin-login');
+      window.history.replaceState({}, document.title, '/');
+    }
+
     const params = new URLSearchParams(window.location.search);
     const projectId = params.get('project');
     if (projectId) {
+      setIsClientView(true); // Isolate the client visually
       loadCloudProject(projectId, 'present').finally(() => {
         window.history.replaceState({}, document.title, window.location.pathname);
       });
     }
+
+    // Set initial mode purely based on OS/Device System Setting
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    setIsDarkMode(mediaQuery.matches);
+    
+    // Listen for OS/Device System Setting changes at runtime
+    const handleChange = (e: MediaQueryListEvent) => setIsDarkMode(e.matches);
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
   }, []);
 
   useEffect(() => {
@@ -84,6 +91,7 @@ export default function App() {
     setDeletedPages(new Set());
     setActiveProjectId(null);
     setActiveProjectTitle('');
+    setIsClientView(false); // Make sure they aren't isolated
     setViewMode('edit');
   };
 
@@ -99,6 +107,7 @@ export default function App() {
   const handleCancelEdit = () => {
     setPdfFile(null);
     setActiveProjectId(null);
+    setIsClientView(false);
     setViewMode('upload');
   };
 
@@ -109,20 +118,13 @@ export default function App() {
         <header className="flex-none px-6 py-4 bg-white border-b border-gray-200 dark:bg-gray-900 dark:border-gray-800 shadow-sm">
           <div className="max-w-7xl mx-auto flex items-center justify-between">
             <div className="flex items-center space-x-2">
-              <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center shadow-inner cursor-pointer" onClick={() => setViewMode('upload')}>
+              <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center shadow-inner cursor-pointer" onClick={() => { setViewMode('upload'); setIsClientView(false); }}>
                 <Presentation className="text-white w-6 h-6" />
               </div>
               <h1 className="text-xl font-bold tracking-tight">SOFINT<span className="font-light">Decks</span></h1>
             </div>
             
             <div className="flex items-center space-x-2">
-              <button
-                onClick={() => setViewMode('admin-login')}
-                className="flex items-center px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition"
-              >
-                <Shield className="w-4 h-4 mr-2" />
-                Admin
-              </button>
               <button
                 onClick={() => setIsDarkMode(!isDarkMode)}
                 className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
@@ -170,8 +172,8 @@ export default function App() {
           {viewMode === 'admin-dashboard' && (
              <div className="w-full flex-1 flex flex-col min-h-[70vh]">
                 <AdminDashboard 
-                  onLogout={() => setViewMode('upload')} 
-                  onEditProject={(id) => loadCloudProject(id, 'edit')} 
+                  onLogout={() => { setViewMode('upload'); setIsClientView(false); }} 
+                  onEditProject={(id) => { setIsClientView(false); loadCloudProject(id, 'edit'); }} 
                 />
              </div>
           )}
