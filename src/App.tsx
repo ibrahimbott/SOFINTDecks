@@ -2,22 +2,66 @@ import React, { useState, useEffect } from 'react';
 import { Upload } from './components/Upload';
 import { Editor } from './components/Editor';
 import { Viewer } from './components/Viewer';
-import { Moon, Sun, Presentation } from 'lucide-react';
+import { Moon, Sun, Presentation, Loader2 } from 'lucide-react';
 import { cn } from './lib/utils';
+import { supabase } from './lib/supabase';
 
-type ViewMode = 'upload' | 'edit' | 'present';
+type ViewMode = 'upload' | 'edit' | 'present' | 'loading';
 
 export default function App() {
   const [viewMode, setViewMode] = useState<ViewMode>('upload');
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [deletedPages, setDeletedPages] = useState<Set<number>>(new Set());
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [cloudError, setCloudError] = useState<string | null>(null);
 
   useEffect(() => {
     // Check system preference on initial load
     if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
       setIsDarkMode(true);
     }
+  }, []);
+
+  useEffect(() => {
+    const loadCloudProject = async () => {
+      const params = new URLSearchParams(window.location.search);
+      const projectId = params.get('project');
+      if (!projectId) return;
+
+      setViewMode('loading');
+      try {
+        // Fetch project metadata
+        const { data: projectRow, error: projectError } = await supabase
+          .from('projects')
+          .select('*')
+          .eq('id', projectId)
+          .single();
+
+        if (projectError || !projectRow) throw new Error("Presentation not found.");
+
+        // Download PDF
+        const { data: fileData, error: fileError } = await supabase.storage
+          .from('presentations')
+          .download(projectRow.file_path);
+
+        if (fileError || !fileData) throw new Error("Could not download the presentation file. Ensure the backend SQL was run.");
+
+        const file = new File([fileData], "presentation.pdf", { type: "application/pdf" });
+
+        setPdfFile(file);
+        setDeletedPages(new Set(projectRow.deleted_pages || []));
+        setViewMode('present');
+
+      } catch (error: any) {
+        console.error("Cloud load error:", error);
+        setCloudError(error.message);
+        setViewMode('upload');
+      } finally {
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    };
+
+    loadCloudProject();
   }, []);
 
   useEffect(() => {
@@ -75,6 +119,19 @@ export default function App() {
       <main className="flex-1 flex items-center justify-center p-6 sm:p-8 md:p-12 relative w-full">
         <div className="w-full max-w-7xl h-full flex flex-col items-center justify-center">
           
+          {cloudError && (
+             <div className="w-full max-w-2xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-4 rounded-xl mb-6 text-center border border-red-200 dark:border-red-800">
+               {cloudError}
+             </div>
+          )}
+
+          {viewMode === 'loading' && (
+            <div className="w-full flex-1 flex flex-col items-center justify-center space-y-4">
+               <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
+               <p className="text-gray-500 font-medium">Downloading presentation from cloud...</p>
+            </div>
+          )}
+
           {viewMode === 'upload' && (
             <div className="w-full flex items-center justify-center">
               <Upload onUpload={handleUpload} />

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
-import { Play, Trash } from 'lucide-react';
+import { Play, Trash, CloudUpload, Loader2, Link2, Check } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { PDFDocument } from 'pdf-lib';
+import { supabase } from '../lib/supabase';
 
 // Configure the worker to use the local Vite-bundled version for instant caching and avoiding DNS lookups
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
@@ -22,6 +23,10 @@ export function Editor({ file, onPresent, onCancel, initialDeletedPages }: Edito
   const [deletedPages, setDeletedPages] = useState<Set<number>>(initialDeletedPages || new Set());
   const [isProcessing, setIsProcessing] = useState(false);
   const [fileUrl, setFileUrl] = useState<string>('');
+
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     const url = URL.createObjectURL(file);
@@ -49,6 +54,52 @@ export function Editor({ file, onPresent, onCancel, initialDeletedPages }: Edito
     onPresent(deletedPages);
   };
 
+  const handlePublish = async () => {
+    setIsPublishing(true);
+    setShareUrl(null);
+    try {
+      const fileName = `${crypto.randomUUID()}.pdf`;
+
+      // 1. Upload to Storage
+      const { error: uploadError } = await supabase.storage
+        .from('presentations')
+        .upload(fileName, file);
+
+      if (uploadError) throw uploadError;
+
+      // 2. Insert into PostgreSQL
+      const deletedArray = Array.from(deletedPages);
+      const { data: projectData, error: insertError } = await supabase
+        .from('projects')
+        .insert({
+          file_path: fileName,
+          deleted_pages: deletedArray
+        })
+        .select('id')
+        .single();
+
+      if (insertError || !projectData) throw insertError;
+
+      // 3. Construct URL
+      const url = `${window.location.origin}?project=${projectData.id}`;
+      setShareUrl(url);
+
+    } catch (error: any) {
+      console.error("Publish error:", error);
+      alert("Failed to save. Did you remember to run the SQL snippet in your Supabase dashboard?");
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
+  const copyToClipboard = () => {
+    if (shareUrl) {
+      navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full max-h-[80vh]">
       <div className="flex items-center justify-between mb-6">
@@ -56,7 +107,16 @@ export function Editor({ file, onPresent, onCancel, initialDeletedPages }: Edito
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Prepare Slides</h2>
           <p className="text-gray-500 dark:text-gray-400">Select pages to skip or keep in your presentation.</p>
         </div>
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center space-x-3">
+          <button
+            onClick={handlePublish}
+            disabled={isPublishing || isProcessing || numPages === 0}
+            className="flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg outline-none hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-700 disabled:opacity-50"
+          >
+            {isPublishing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CloudUpload className="w-4 h-4 mr-2" />}
+            {isPublishing ? 'Saving...' : 'Save & Share'}
+          </button>
+          
           <button
             onClick={onCancel}
             className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg outline-none hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-700"
@@ -77,6 +137,32 @@ export function Editor({ file, onPresent, onCancel, initialDeletedPages }: Edito
           </button>
         </div>
       </div>
+
+      {shareUrl && (
+        <div className="mb-6 p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 flex items-center justify-between">
+          <div className="flex items-center space-x-3 overflow-hidden">
+            <Link2 className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+            <span className="text-sm text-blue-800 dark:text-blue-300 truncate">{shareUrl}</span>
+          </div>
+          <div className="flex items-center space-x-2">
+            <a
+              href={`https://wa.me/?text=${encodeURIComponent(`Check out this presentation: ${shareUrl}`)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-shrink-0 flex items-center px-4 py-1.5 text-xs font-medium text-white bg-green-500 hover:bg-green-600 dark:bg-green-600 dark:hover:bg-green-700 transition rounded-md shadow-sm"
+            >
+              Share on WhatsApp
+            </a>
+            <button
+              onClick={copyToClipboard}
+              className="flex-shrink-0 flex items-center px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-100 hover:bg-blue-200 dark:text-blue-300 dark:bg-blue-800/50 dark:hover:bg-blue-800 transition rounded-md"
+            >
+              {copied ? <Check className="w-4 h-4 mr-1" /> : null}
+              {copied ? "Copied!" : "Copy Link"}
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto p-4 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-800">
         <Document
