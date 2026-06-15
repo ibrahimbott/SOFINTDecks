@@ -26,14 +26,20 @@ export function Viewer({ file, deletedPages, onClose, isDarkMode, toggleDarkMode
   const [renderWindow, setRenderWindow] = useState<number[]>([]);
   const [downloadUrl, setDownloadUrl] = useState<string>('');
   const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
+  const [docFile, setDocFile] = useState<{ url: string } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    const objectUrl = URL.createObjectURL(file);
+    setDocFile({ url: objectUrl });
+    
     if (!isSharedView) {
-      const objectUrl = URL.createObjectURL(file);
       setDownloadUrl(objectUrl);
-      return () => URL.revokeObjectURL(objectUrl);
     }
+    
+    return () => {
+      URL.revokeObjectURL(objectUrl);
+    };
   }, [file, isSharedView]);
 
   const handleDownload = async (e: React.MouseEvent) => {
@@ -72,13 +78,19 @@ export function Viewer({ file, deletedPages, onClose, isDarkMode, toggleDarkMode
       const pages = pdfDoc.getPages();
       pages.forEach((page) => {
         const { width } = page.getSize();
-        page.drawText('SOFINT', {
-          x: width - 85,
-          y: 20,
-          size: 16,
+        const watermarkText = 'SOFINT Decks';
+        
+        // Dynamically scale font size based on page width so it's always readable but not overwhelming (approx 2.5% of width, min 16pt)
+        const fontSize = Math.max(16, width * 0.025);
+        const textWidth = font.widthOfTextAtSize(watermarkText, fontSize);
+        
+        page.drawText(watermarkText, {
+          x: width - textWidth - (width * 0.04), // Dynamic padding from right edge
+          y: Math.max(20, width * 0.04), // Dynamic padding from bottom edge
+          size: fontSize,
           font: font,
           color: rgb(0.5, 0.5, 0.5),
-          opacity: 0.35,
+          opacity: 0.5,
         });
       });
       
@@ -260,20 +272,20 @@ export function Viewer({ file, deletedPages, onClose, isDarkMode, toggleDarkMode
       </div>
 
       {/* Main viewer area */}
-      <div className="flex-1 w-full flex items-center justify-center overflow-hidden relative group py-8 px-4 md:px-12">
+      <div className="flex-1 w-full flex items-center justify-center overflow-hidden relative group py-8 px-4 md:px-16">
         {/* Previous Button */}
         <button
           onClick={() => changePage(-1)}
           disabled={currentIndex <= 0}
           className={cn(
-            "absolute left-4 z-20 p-3 rounded-full transition-all backdrop-blur-sm",
-            "opacity-0 group-hover:opacity-100 focus:opacity-100 disabled:opacity-0",
+            "absolute left-4 md:left-4 top-1/2 -translate-y-1/2 z-30 p-3 md:p-4 rounded-full transition-all duration-[600ms] ease-[cubic-bezier(0.22,1,0.36,1)] backdrop-blur-[10px]",
+            "opacity-100 disabled:opacity-0 disabled:pointer-events-none shadow-xl hover:scale-105 active:scale-95",
             isFullscreen 
-              ? "bg-white/10 text-white hover:bg-white/20" 
-              : "bg-white/80 dark:bg-gray-800/80 text-gray-800 dark:text-gray-200 shadow-md hover:bg-white dark:hover:bg-gray-700"
+              ? "bg-white/10 text-white hover:bg-white/20 border border-white/20" 
+              : "bg-white/90 dark:bg-gray-800/90 text-gray-800 dark:text-gray-200 hover:bg-white dark:hover:bg-gray-700 border border-black/10 dark:border-white/10"
           )}
         >
-          <ChevronLeft className="w-8 h-8" />
+          <ChevronLeft className="w-8 h-8 md:w-10 md:h-10" />
         </button>
 
         <div className={cn(
@@ -281,38 +293,41 @@ export function Viewer({ file, deletedPages, onClose, isDarkMode, toggleDarkMode
           // The magic dark mode filter for the PDF canvas
           isDarkMode ? "invert hue-rotate-180" : ""
         )}>
-          <Document
-            file={file}
-            onLoadSuccess={onDocumentLoadSuccess}
-            loading={<div className="text-gray-500 animate-pulse">Loading engine...</div>}
-            className="flex justify-center items-center w-full h-full relative"
-          >
-            {renderWindow.map((p) => {
-                const isActive = p === validPages[currentIndex];
-                return (
-                  <div
-                    key={p}
-                    className={cn(
-                      "absolute inset-0 flex flex-col items-center justify-center transition-opacity duration-200",
-                      isActive ? "opacity-100 z-10" : "opacity-0 z-0 pointer-events-none"
-                    )}
-                  >
-                    <Page
-                      pageNumber={p}
-                      width={1800}
+          {docFile && (
+            <Document
+              file={docFile}
+              onLoadSuccess={onDocumentLoadSuccess}
+              loading={<div className="text-gray-500 animate-pulse font-medium tracking-wide">Loading engine...</div>}
+              className="flex justify-center items-center w-full h-full relative"
+            >
+              {renderWindow.map((p) => {
+                  const isActive = p === validPages[currentIndex];
+                  return (
+                    <div
+                      key={p}
                       className={cn(
-                         "flex items-center justify-center max-w-full max-h-full",
-                         "[&_div]:max-w-full [&_div]:max-h-full [&_div]:flex [&_div]:items-center [&_div]:justify-center",
-                         "[&_canvas]:max-w-full [&_canvas]:max-h-full [&_canvas]:w-auto! [&_canvas]:h-auto! [&_canvas]:object-contain [&_canvas]:shadow-2xl [&_canvas]:rounded-md"
+                        "absolute inset-0 flex flex-col items-center justify-center transition-all duration-[600ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
+                        isActive ? "opacity-100 z-10 scale-100" : "opacity-0 z-0 scale-[0.95] pointer-events-none"
                       )}
-                      renderTextLayer={false}
-                      renderAnnotationLayer={false}
-                      loading={null}
-                    />
-                  </div>
-                );
-              })}
-          </Document>
+                    >
+                      <Page
+                        pageNumber={p}
+                        width={1200}
+                        devicePixelRatio={Math.min(window.devicePixelRatio || 1, 2)}
+                        className={cn(
+                           "flex items-center justify-center max-w-full max-h-full transition-transform duration-[600ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
+                           "[&_div]:max-w-full [&_div]:max-h-full [&_div]:flex [&_div]:items-center [&_div]:justify-center",
+                           "[&_canvas]:max-w-full [&_canvas]:max-h-full [&_canvas]:w-auto! [&_canvas]:h-auto! [&_canvas]:object-contain [&_canvas]:shadow-2xl [&_canvas]:rounded-xl"
+                        )}
+                        renderTextLayer={false}
+                        renderAnnotationLayer={false}
+                        loading={null}
+                      />
+                    </div>
+                  );
+                })}
+            </Document>
+          )}
         </div>
 
         {/* Next Button */}
@@ -320,21 +335,21 @@ export function Viewer({ file, deletedPages, onClose, isDarkMode, toggleDarkMode
           onClick={() => changePage(1)}
           disabled={currentIndex >= validPages.length - 1}
           className={cn(
-            "absolute right-4 z-20 p-3 rounded-full transition-all backdrop-blur-sm",
-            "opacity-0 group-hover:opacity-100 focus:opacity-100 disabled:opacity-0",
+            "absolute right-4 md:right-4 top-1/2 -translate-y-1/2 z-30 p-3 md:p-4 rounded-full transition-all duration-[600ms] ease-[cubic-bezier(0.22,1,0.36,1)] backdrop-blur-[10px]",
+            "opacity-100 disabled:opacity-0 disabled:pointer-events-none shadow-xl hover:scale-105 active:scale-95",
             isFullscreen 
-              ? "bg-white/10 text-white hover:bg-white/20" 
-              : "bg-white/80 dark:bg-gray-800/80 text-gray-800 dark:text-gray-200 shadow-md hover:bg-white dark:hover:bg-gray-700"
+              ? "bg-white/10 text-white hover:bg-white/20 border border-white/20" 
+              : "bg-white/90 dark:bg-gray-800/90 text-gray-800 dark:text-gray-200 hover:bg-white dark:hover:bg-gray-700 border border-black/10 dark:border-white/10"
           )}
         >
-          <ChevronRight className="w-8 h-8" />
+          <ChevronRight className="w-8 h-8 md:w-10 md:h-10" />
         </button>
       </div>
 
       {/* Visual Screen Watermark */}
       {isSharedView && (
-        <div className="absolute bottom-6 right-8 z-30 pointer-events-none select-none opacity-[0.35] mix-blend-difference flex items-center">
-          <span className="text-xl font-bold tracking-tight text-white drop-shadow-md">
+        <div className="absolute bottom-6 right-8 z-30 pointer-events-none select-none opacity-50 mix-blend-difference flex items-center">
+          <span className="text-2xl font-bold tracking-tight text-white drop-shadow-sm">
             SOFINT<span className="font-light">Decks</span>
           </span>
         </div>

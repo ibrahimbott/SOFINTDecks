@@ -2,8 +2,8 @@ import { createClient } from '@supabase/supabase-js';
 
 // These will be replaced with your actual Supabase Project credentials once you create the free account.
 // For now, they use environment variables that we will configure when you deploy to Vercel.
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://placeholder.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'placeholder-key';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://tvsehsudebcyiigxbfbr.supabase.co';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_OCBqgVDIHl5Jntjo6TqicA_PJwRqQGP';
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
