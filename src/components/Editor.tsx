@@ -138,11 +138,12 @@ export function Editor({ file, onPresent, onCancel, initialDeletedPages, existin
 
       if (existingProjectId) {
          // UPDATE Mode (Admin edit)
+         const cleanTitle = title.trim() || 'Untitled';
          const { error: updateError } = await supabase
             .from('projects')
             .update({
                deleted_pages: Array.from(deletedPages),
-               title: title,
+               title: cleanTitle,
                theme_mode: themeMode,
                allow_download: allowDownload
             })
@@ -160,12 +161,13 @@ export function Editor({ file, onPresent, onCancel, initialDeletedPages, existin
          if (uploadError) throw uploadError;
 
          const deletedArray = Array.from(deletedPages);
+         const cleanTitle = title.trim() || 'Untitled';
          const { data: projectData, error: insertError } = await supabase
            .from('projects')
            .insert({
              file_path: fileName,
              deleted_pages: deletedArray,
-             title: title,
+             title: cleanTitle,
              theme_mode: themeMode,
              allow_download: allowDownload
            })
@@ -177,7 +179,7 @@ export function Editor({ file, onPresent, onCancel, initialDeletedPages, existin
       }
 
       // 3. Construct URL
-      const shortSlug = `${encodeURIComponent(title.trim() || 'Untitled')}-sofint`;
+      const shortSlug = `${encodeURIComponent(cleanTitle)}-sofint`;
       const url = `${window.location.origin}?p=${shortSlug}`;
       setShareUrl(url);
 

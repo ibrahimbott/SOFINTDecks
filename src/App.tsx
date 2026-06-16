@@ -41,7 +41,10 @@ export default function App() {
       const { data, error } = await query;
       const projectRow = data?.[0];
 
-      if (error || !projectRow) throw new Error("Presentation not found.");
+      if (error || !projectRow) {
+        console.error("Query failed:", { error, data, projectIdOrSlug, titleSearch: projectIdOrSlug.endsWith('-sofint') ? decodeURIComponent(projectIdOrSlug.replace(/-sofint$/, '')).trim() : null });
+        throw new Error("Presentation not found.");
+      }
 
       const { data: fileData, error: fileError } = await supabase.storage
         .from('presentations')
@@ -53,7 +56,7 @@ export default function App() {
 
       setPdfFile(file);
       setDeletedPages(new Set(projectRow.deleted_pages || []));
-      setActiveProjectId(projectId);
+      setActiveProjectId(projectRow.id);
       setActiveProjectTitle(projectRow.title || "Untitled Presentation");
       setProjectThemeMode(projectRow.theme_mode || 'system');
       setProjectAllowDownload(projectRow.allow_download ?? true);

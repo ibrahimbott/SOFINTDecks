@@ -300,14 +300,14 @@ export function Viewer({ file, deletedPages, onClose, isDarkMode, toggleDarkMode
           onClick={() => changePage(-1)}
           disabled={currentIndex <= 0}
           className={cn(
-            "absolute left-4 md:left-4 top-24 md:top-1/2 md:-translate-y-1/2 z-30 p-3 md:p-4 rounded-full transition-all duration-[600ms] ease-[cubic-bezier(0.22,1,0.36,1)] backdrop-blur-[10px]",
+            "absolute left-4 md:left-4 top-20 md:top-1/2 md:-translate-y-1/2 z-30 p-2 md:p-4 rounded-full transition-all duration-[600ms] ease-[cubic-bezier(0.22,1,0.36,1)] backdrop-blur-[10px]",
             "opacity-100 disabled:opacity-0 disabled:pointer-events-none shadow-xl hover:scale-105 active:scale-95",
             isFullscreen 
               ? "bg-white/10 text-white hover:bg-white/20 border border-white/20" 
               : "bg-white/90 dark:bg-gray-800/90 text-gray-800 dark:text-gray-200 hover:bg-white dark:hover:bg-gray-700 border border-black/10 dark:border-white/10"
           )}
         >
-          <ChevronLeft className="w-8 h-8 md:w-10 md:h-10" />
+          <ChevronLeft className="w-6 h-6 md:w-10 md:h-10" />
         </button>
 
         <div className={cn(
@@ -357,14 +357,14 @@ export function Viewer({ file, deletedPages, onClose, isDarkMode, toggleDarkMode
           onClick={() => changePage(1)}
           disabled={currentIndex >= validPages.length - 1}
           className={cn(
-            "absolute right-4 md:right-4 top-24 md:top-1/2 md:-translate-y-1/2 z-30 p-3 md:p-4 rounded-full transition-all duration-[600ms] ease-[cubic-bezier(0.22,1,0.36,1)] backdrop-blur-[10px]",
+            "absolute right-4 md:right-4 top-20 md:top-1/2 md:-translate-y-1/2 z-30 p-2 md:p-4 rounded-full transition-all duration-[600ms] ease-[cubic-bezier(0.22,1,0.36,1)] backdrop-blur-[10px]",
             "opacity-100 disabled:opacity-0 disabled:pointer-events-none shadow-xl hover:scale-105 active:scale-95",
             isFullscreen 
               ? "bg-white/10 text-white hover:bg-white/20 border border-white/20" 
               : "bg-white/90 dark:bg-gray-800/90 text-gray-800 dark:text-gray-200 hover:bg-white dark:hover:bg-gray-700 border border-black/10 dark:border-white/10"
           )}
         >
-          <ChevronRight className="w-8 h-8 md:w-10 md:h-10" />
+          <ChevronRight className="w-6 h-6 md:w-10 md:h-10" />
         </button>
       </div>
 
