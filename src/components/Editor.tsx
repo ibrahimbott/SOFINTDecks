@@ -177,7 +177,8 @@ export function Editor({ file, onPresent, onCancel, initialDeletedPages, existin
       }
 
       // 3. Construct URL
-      const url = `${window.location.origin}?project=${projectId}`;
+      const shortSlug = `${encodeURIComponent(title.trim() || 'Untitled')}-sofint`;
+      const url = `${window.location.origin}?p=${shortSlug}`;
       setShareUrl(url);
 
     } catch (error: any) {

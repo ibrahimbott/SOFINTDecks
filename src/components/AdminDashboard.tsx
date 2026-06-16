@@ -41,8 +41,13 @@ export function AdminDashboard({ onLogout, onEditProject, onUploadNew }: AdminDa
     fetchProjects();
   }, []);
 
-  const handleCopy = (id: string) => {
-    navigator.clipboard.writeText(`${window.location.origin}?project=${id}`);
+  const handleCopy = (id: string, title?: string) => {
+    if (title) {
+      const shortSlug = `${encodeURIComponent(title.trim() || 'Untitled')}-sofint`;
+      navigator.clipboard.writeText(`${window.location.origin}?p=${shortSlug}`);
+    } else {
+      navigator.clipboard.writeText(`${window.location.origin}?project=${id}`);
+    }
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
   };
@@ -129,7 +134,7 @@ export function AdminDashboard({ onLogout, onEditProject, onUploadNew }: AdminDa
 
                 <div className="flex items-center space-x-2 flex-shrink-0">
                   <button
-                    onClick={() => handleCopy(project.id)}
+                    onClick={() => handleCopy(project.id, project.title)}
                     className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 dark:text-gray-300 dark:hover:text-blue-400 dark:hover:bg-blue-900/30 rounded-lg transition"
                     title="Copy Link"
                   >

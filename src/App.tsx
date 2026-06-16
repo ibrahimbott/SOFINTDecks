@@ -23,17 +23,25 @@ export default function App() {
   const [projectAllowDownload, setProjectAllowDownload] = useState<boolean>(true);
   const [isClientView, setIsClientView] = useState(false);
 
-  const loadCloudProject = async (projectId: string, mode: 'present' | 'edit') => {
+  const loadCloudProject = async (projectIdOrSlug: string, mode: 'present' | 'edit') => {
     setViewMode('loading');
     setCloudError(null);
     try {
-      const { data: projectRow, error: projectError } = await supabase
-        .from('projects')
-        .select('*')
-        .eq('id', projectId)
-        .single();
+      let query = supabase.from('projects').select('*');
+      
+      // If it's a short link (e.g. MyProject-sofint)
+      if (projectIdOrSlug.endsWith('-sofint')) {
+        const titleSearch = decodeURIComponent(projectIdOrSlug.replace(/-sofint$/, '')).trim();
+        query = query.eq('title', titleSearch).order('created_at', { ascending: false }).limit(1);
+      } else {
+        // Fallback or old UUID links
+        query = query.eq('id', projectIdOrSlug).limit(1);
+      }
 
-      if (projectError || !projectRow) throw new Error("Presentation not found.");
+      const { data, error } = await query;
+      const projectRow = data?.[0];
+
+      if (error || !projectRow) throw new Error("Presentation not found.");
 
       const { data: fileData, error: fileError } = await supabase.storage
         .from('presentations')
@@ -75,9 +83,16 @@ export default function App() {
 
     const params = new URLSearchParams(window.location.search);
     const projectId = params.get('project');
+    const shortProject = params.get('p');
+    
     if (projectId) {
-      setIsClientView(true); // Isolate the client visually
+      setIsClientView(true);
       loadCloudProject(projectId, 'present').finally(() => {
+        window.history.replaceState({}, document.title, window.location.pathname);
+      });
+    } else if (shortProject) {
+      setIsClientView(true);
+      loadCloudProject(shortProject, 'present').finally(() => {
         window.history.replaceState({}, document.title, window.location.pathname);
       });
     }
