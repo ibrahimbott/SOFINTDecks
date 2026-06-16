@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import { Play, Trash, CloudUpload, Loader2, Link2, Check } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -11,21 +11,94 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   import.meta.url,
 ).toString();
 
+// A simple wrapper to only render the Page when it scrolls into view
+function LazyPage({ index, isDeleted, togglePageDeletion }: { index: number, isDeleted: boolean, togglePageDeletion: (i: number) => void }) {
+  const [isVisible, setIsVisible] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setIsVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '2000px' }
+    );
+    if (containerRef.current) {
+      observer.observe(containerRef.current);
+    }
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div 
+      ref={containerRef}
+      key={`page_${index + 1}`} 
+      className="flex flex-col items-center group w-[150px] min-h-[212px]"
+    >
+      <div 
+        className={cn(
+          "relative overflow-hidden rounded-lg shadow-sm border-2 transition-all cursor-pointer w-[150px] h-[212px]",
+          isDeleted 
+            ? "border-red-500 opacity-50 grayscale" 
+            : "border-transparent hover:border-blue-400 hover:shadow-md"
+        )}
+        onClick={() => togglePageDeletion(index)}
+      >
+        {isVisible ? (
+          <Page 
+            pageNumber={index + 1} 
+            width={150} 
+            devicePixelRatio={1}
+            renderTextLayer={false} 
+            renderAnnotationLayer={false}
+            loading={<div className="w-[150px] h-[212px] bg-gray-200 dark:bg-gray-800 animate-pulse" />}
+          />
+        ) : (
+          <div className="w-[150px] h-[212px] bg-gray-100 dark:bg-gray-800 animate-pulse" />
+        )}
+        {isDeleted && (
+          <div className="absolute inset-0 flex items-center justify-center bg-red-900/20 backdrop-blur-[1px]">
+            <Trash className="w-10 h-10 text-red-600" />
+          </div>
+        )}
+        {!isDeleted && (
+          <div className="absolute inset-0 flex items-center justify-center bg-blue-900/10 opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-[1px]">
+            <div className="bg-white dark:bg-gray-800 rounded-full p-2 text-gray-700 dark:text-gray-200 shadow-lg">
+              <span className="sr-only">Skip Page</span>
+              <Trash className="w-4 h-4" />
+            </div>
+          </div>
+        )}
+      </div>
+      <span className="text-xs font-medium text-gray-500 mt-2">
+        Page {index + 1}
+      </span>
+    </div>
+  );
+}
+
 interface EditorProps {
   file: File;
-  onPresent: (deleted: Set<number>) => void;
+  onPresent: (deleted: Set<number>, theme: 'system'|'light'|'dark', download: boolean) => void;
   onCancel: () => void;
   initialDeletedPages?: Set<number>;
   existingProjectId?: string | null;
   initialTitle?: string;
+  initialThemeMode?: 'system'|'light'|'dark';
+  initialAllowDownload?: boolean;
 }
 
-export function Editor({ file, onPresent, onCancel, initialDeletedPages, existingProjectId, initialTitle }: EditorProps) {
+export function Editor({ file, onPresent, onCancel, initialDeletedPages, existingProjectId, initialTitle, initialThemeMode, initialAllowDownload }: EditorProps) {
   const [numPages, setNumPages] = useState<number>(0);
   const [deletedPages, setDeletedPages] = useState<Set<number>>(initialDeletedPages || new Set());
   const [isProcessing, setIsProcessing] = useState(false);
   const [fileUrl, setFileUrl] = useState<string>('');
   const [title, setTitle] = useState(initialTitle || 'Untitled Presentation');
+  const [themeMode, setThemeMode] = useState<'system'|'light'|'dark'>(initialThemeMode || 'system');
+  const [allowDownload, setAllowDownload] = useState<boolean>(initialAllowDownload ?? true);
 
   const [isPublishing, setIsPublishing] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
@@ -54,7 +127,7 @@ export function Editor({ file, onPresent, onCancel, initialDeletedPages, existin
   const handleStartPresentation = async () => {
     // We seamlessly pass the deleted pages logic purely by index 
     // to bypass massive cloning performance limits in typical pdf processing
-    onPresent(deletedPages);
+    onPresent(deletedPages, themeMode, allowDownload);
   };
 
   const handlePublish = async () => {
@@ -69,7 +142,9 @@ export function Editor({ file, onPresent, onCancel, initialDeletedPages, existin
             .from('projects')
             .update({
                deleted_pages: Array.from(deletedPages),
-               title: title
+               title: title,
+               theme_mode: themeMode,
+               allow_download: allowDownload
             })
             .eq('id', existingProjectId);
          
@@ -90,7 +165,9 @@ export function Editor({ file, onPresent, onCancel, initialDeletedPages, existin
            .insert({
              file_path: fileName,
              deleted_pages: deletedArray,
-             title: title
+             title: title,
+             theme_mode: themeMode,
+             allow_download: allowDownload
            })
            .select('id')
            .single();
@@ -105,7 +182,7 @@ export function Editor({ file, onPresent, onCancel, initialDeletedPages, existin
 
     } catch (error: any) {
       console.error("Publish error:", error);
-      alert("Failed to save. Did you remember to run the SQL snippet in your Supabase dashboard? Note: For Edits, you must upgrade the SQL table.");
+      alert(`Failed to save: ${error.message || "Unknown error"}\n\nIf you recently added theme or download features, make sure to run the SQL command in Supabase to add 'theme_mode' and 'allow_download' columns to the 'projects' table.`);
     } finally {
       setIsPublishing(false);
     }
@@ -121,18 +198,48 @@ export function Editor({ file, onPresent, onCancel, initialDeletedPages, existin
 
   return (
     <div className="flex flex-col h-full max-h-[80vh]">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex-1 mr-4">
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Presentation Title"
-            className="text-2xl font-bold text-gray-900 dark:text-white bg-transparent border-b-2 border-transparent hover:border-gray-200 dark:hover:border-gray-700 focus:border-blue-500 dark:focus:border-blue-500 outline-none w-full max-w-md transition-colors placeholder-gray-400 dark:placeholder-gray-600 pb-1"
-          />
-          <p className="text-gray-500 dark:text-gray-400 mt-1">Select pages to skip or keep in your presentation.</p>
+      <div className="flex flex-col mb-6 space-y-4">
+        {/* Title and Settings row */}
+        <div className="flex items-start justify-between flex-wrap gap-4">
+          <div className="flex-1 mr-4 min-w-[300px]">
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Presentation Title"
+              className="text-2xl font-bold text-gray-900 dark:text-white bg-transparent border-b-2 border-transparent hover:border-gray-200 dark:hover:border-gray-700 focus:border-blue-500 dark:focus:border-blue-500 outline-none w-full transition-colors placeholder-gray-400 dark:placeholder-gray-600 pb-1"
+            />
+            <p className="text-gray-500 dark:text-gray-400 mt-1">Select pages to skip or keep in your presentation.</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center space-x-2 bg-gray-100 dark:bg-gray-800 p-1.5 rounded-lg border border-gray-200 dark:border-gray-700">
+               <label className="text-xs font-medium text-gray-600 dark:text-gray-300 ml-1">Theme:</label>
+               <select 
+                 value={themeMode} 
+                 onChange={(e) => setThemeMode(e.target.value as 'system'|'light'|'dark')}
+                 className="bg-white dark:bg-gray-900 text-sm border-none shadow-sm rounded-md py-1 px-2 outline-none cursor-pointer"
+               >
+                  <option value="system">System Default</option>
+                  <option value="light">Always Light</option>
+                  <option value="dark">Always Dark</option>
+               </select>
+            </div>
+            <div className="flex items-center bg-gray-100 dark:bg-gray-800 p-1.5 px-3 rounded-lg border border-gray-200 dark:border-gray-700">
+               <label className="text-sm font-medium text-gray-700 dark:text-gray-200 cursor-pointer flex items-center space-x-2">
+                 <input 
+                   type="checkbox" 
+                   checked={allowDownload} 
+                   onChange={(e) => setAllowDownload(e.target.checked)}
+                   className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                 />
+                 <span>Allow PDF Download</span>
+               </label>
+            </div>
+          </div>
         </div>
-        <div className="flex items-center space-x-3">
+
+        {/* Action Buttons */}
+        <div className="flex items-center justify-end space-x-3 border-t border-gray-100 dark:border-gray-800 pt-4">
           <button
             onClick={handlePublish}
             disabled={isPublishing || isProcessing || numPages === 0}
@@ -199,43 +306,12 @@ export function Editor({ file, onPresent, onCancel, initialDeletedPages, existin
           {Array.from(new Array(numPages), (_el, index) => {
             const isDeleted = deletedPages.has(index);
             return (
-              <div 
-                key={`page_${index + 1}`} 
-                className="flex flex-col items-center group"
-              >
-                <div 
-                  className={cn(
-                    "relative overflow-hidden rounded-lg shadow-sm border-2 transition-all cursor-pointer",
-                    isDeleted 
-                      ? "border-red-500 opacity-50 grayscale" 
-                      : "border-transparent hover:border-blue-400 hover:shadow-md"
-                  )}
-                  onClick={() => togglePageDeletion(index)}
-                >
-                  <Page 
-                    pageNumber={index + 1} 
-                    width={200} 
-                    renderTextLayer={false} 
-                    renderAnnotationLayer={false}
-                    loading={<div className="w-[200px] h-[282px] bg-gray-200 dark:bg-gray-800 animate-pulse" />}
-                  />
-                  {isDeleted && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-red-900/20 backdrop-blur-[1px]">
-                      <Trash className="w-10 h-10 text-red-600" />
-                    </div>
-                  )}
-                  {!isDeleted && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-blue-900/10 opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-[1px]">
-                      <div className="bg-white dark:bg-gray-800 rounded-full p-2 text-gray-700 dark:text-gray-200 shadow-lg">
-                        Skip Page
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <div className="mt-2 text-sm font-medium text-gray-500 dark:text-gray-400">
-                  Slide {index + 1}
-                </div>
-              </div>
+              <LazyPage 
+                key={`page_${index + 1}`}
+                index={index}
+                isDeleted={isDeleted}
+                togglePageDeletion={togglePageDeletion}
+              />
             );
           })}
         </Document>

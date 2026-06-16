@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { motion } from 'motion/react';
 import { Upload } from './components/Upload';
 import { Editor } from './components/Editor';
 import { Viewer } from './components/Viewer';
@@ -8,16 +9,18 @@ import { Moon, Sun, Presentation, Loader2, Shield } from 'lucide-react';
 import { cn } from './lib/utils';
 import { supabase } from './lib/supabase';
 
-type ViewMode = 'upload' | 'edit' | 'present' | 'loading' | 'admin-login' | 'admin-dashboard';
+type ViewMode = 'upload' | 'edit' | 'present' | 'loading' | 'admin-login' | 'admin-dashboard' | 'not-found' | 'landing';
 
 export default function App() {
-  const [viewMode, setViewMode] = useState<ViewMode>('upload');
+  const [viewMode, setViewMode] = useState<ViewMode>('landing');
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [deletedPages, setDeletedPages] = useState<Set<number>>(new Set());
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [cloudError, setCloudError] = useState<string | null>(null);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [activeProjectTitle, setActiveProjectTitle] = useState<string>('');
+  const [projectThemeMode, setProjectThemeMode] = useState<'system'|'light'|'dark'>('system');
+  const [projectAllowDownload, setProjectAllowDownload] = useState<boolean>(true);
   const [isClientView, setIsClientView] = useState(false);
 
   const loadCloudProject = async (projectId: string, mode: 'present' | 'edit') => {
@@ -44,7 +47,15 @@ export default function App() {
       setDeletedPages(new Set(projectRow.deleted_pages || []));
       setActiveProjectId(projectId);
       setActiveProjectTitle(projectRow.title || "Untitled Presentation");
+      setProjectThemeMode(projectRow.theme_mode || 'system');
+      setProjectAllowDownload(projectRow.allow_download ?? true);
       setViewMode(mode);
+
+      if (projectRow.theme_mode === 'dark') {
+        setIsDarkMode(true);
+      } else if (projectRow.theme_mode === 'light') {
+        setIsDarkMode(false);
+      }
     } catch (error: any) {
       console.error("Cloud load error:", error);
       setCloudError(error.message);
@@ -57,6 +68,9 @@ export default function App() {
     if (window.location.pathname === '/admin' || window.location.pathname === '/admin/') {
       setViewMode('admin-login');
       window.history.replaceState({}, document.title, '/');
+    } else if (window.location.pathname !== '/' && !window.location.pathname.startsWith('/?')) {
+      setViewMode('not-found');
+      return;
     }
 
     const params = new URLSearchParams(window.location.search);
@@ -91,12 +105,20 @@ export default function App() {
     setDeletedPages(new Set());
     setActiveProjectId(null);
     setActiveProjectTitle('');
+    setProjectThemeMode('system');
+    setProjectAllowDownload(true);
     setIsClientView(false); // Make sure they aren't isolated
     setViewMode('edit');
   };
 
-  const handleStartPresentation = (deleted: Set<number>) => {
+  const handleStartPresentation = (deleted: Set<number>, theme: 'system'|'light'|'dark', download: boolean) => {
     setDeletedPages(deleted);
+    setProjectThemeMode(theme);
+    setProjectAllowDownload(download);
+    
+    if (theme === 'dark') setIsDarkMode(true);
+    else if (theme === 'light') setIsDarkMode(false);
+
     setViewMode('present');
   };
 
@@ -147,6 +169,55 @@ export default function App() {
              </div>
           )}
 
+          {viewMode === 'landing' && (
+             <motion.div 
+               initial={{ opacity: 0, y: 20 }}
+               animate={{ opacity: 1, y: 0 }}
+               transition={{ duration: 0.8 }}
+               className="w-full h-full flex flex-col items-center justify-center space-y-6 text-center px-4 bg-gray-50 dark:bg-gray-900"
+             >
+                <div className="relative">
+                   <div className="w-24 h-24 bg-blue-600 rounded-3xl flex items-center justify-center shadow-xl mb-4 rotate-3">
+                     <Shield className="w-12 h-12 text-white" />
+                   </div>
+                   <motion.div 
+                     initial={{ scale: 0 }}
+                     animate={{ scale: 1 }}
+                     transition={{ delay: 0.5, type: 'spring', bounce: 0.5 }}
+                     className="absolute -bottom-2 -right-2 bg-green-500 rounded-full p-1.5 shadow-lg"
+                   >
+                     <div className="w-4 h-4 rounded-full bg-white"></div>
+                   </motion.div>
+                </div>
+                <h1 className="text-4xl md:text-5xl lg:text-6xl tracking-tight font-extrabold text-gray-900 dark:text-white">
+                  Sofint solution
+                </h1>
+                <p className="max-w-2xl text-lg md:text-xl text-gray-600 dark:text-gray-300 leading-relaxed">
+                  This website is only for the team or soft-end solution team.
+                </p>
+                
+                <div className="mt-8 flex flex-col items-center space-y-3">
+                  <span className="text-xs font-bold tracking-widest uppercase text-gray-400 dark:text-gray-500">
+                    Not everyone can access this page
+                  </span>
+                  <a 
+                    href="mailto:contact@sofintsolutions.tech" 
+                    className="text-blue-600 hover:text-blue-700 dark:text-blue-400 font-medium transition-colors"
+                  >
+                    contact@sofintsolutions.tech
+                  </a>
+                </div>
+             </motion.div>
+          )}
+
+          {viewMode === 'not-found' && (
+             <div className="w-full h-full flex flex-col items-center justify-center space-y-6">
+                <Shield className="w-16 h-16 text-blue-600 opacity-50" />
+                <h1 className="text-3xl tracking-tight text-gray-900 dark:text-white">Services only for the team</h1>
+                <p className="text-gray-500 dark:text-gray-400">This page does not exist or requires proper authorization.</p>
+             </div>
+          )}
+
           {viewMode === 'loading' && (
             <div className="w-full flex-1 flex flex-col items-center justify-center space-y-4">
                <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
@@ -172,8 +243,9 @@ export default function App() {
           {viewMode === 'admin-dashboard' && (
              <div className="w-full flex-1 flex flex-col min-h-[70vh]">
                 <AdminDashboard 
-                  onLogout={() => { setViewMode('upload'); setIsClientView(false); }} 
+                  onLogout={() => { setPdfFile(null); setViewMode('landing'); setIsClientView(false); }} 
                   onEditProject={(id) => { setIsClientView(false); loadCloudProject(id, 'edit'); }} 
+                  onUploadNew={() => { setPdfFile(null); setViewMode('upload'); setIsClientView(false); }}
                 />
              </div>
           )}
@@ -187,6 +259,8 @@ export default function App() {
                 initialDeletedPages={deletedPages}
                 existingProjectId={activeProjectId}
                 initialTitle={activeProjectTitle}
+                initialThemeMode={projectThemeMode}
+                initialAllowDownload={projectAllowDownload}
               />
             </div>
           )}
@@ -200,6 +274,7 @@ export default function App() {
                 isDarkMode={isDarkMode}
                 toggleDarkMode={() => setIsDarkMode(!isDarkMode)}
                 isSharedView={isClientView}
+                allowDownload={projectAllowDownload}
               />
             </div>
           )}

@@ -16,9 +16,10 @@ interface ViewerProps {
   isDarkMode: boolean;
   toggleDarkMode: () => void;
   isSharedView?: boolean;
+  allowDownload?: boolean;
 }
 
-export function Viewer({ file, deletedPages, onClose, isDarkMode, toggleDarkMode, isSharedView }: ViewerProps) {
+export function Viewer({ file, deletedPages, onClose, isDarkMode, toggleDarkMode, isSharedView, allowDownload = true }: ViewerProps) {
   const [numPages, setNumPages] = useState<number>(0);
   const [validPages, setValidPages] = useState<number[]>([]);
   const [currentIndex, setCurrentIndex] = useState<number>(0);
@@ -27,6 +28,7 @@ export function Viewer({ file, deletedPages, onClose, isDarkMode, toggleDarkMode
   const [downloadUrl, setDownloadUrl] = useState<string>('');
   const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
   const [docFile, setDocFile] = useState<{ url: string } | null>(null);
+  const [hasClickedStart, setHasClickedStart] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -229,7 +231,7 @@ export function Viewer({ file, deletedPages, onClose, isDarkMode, toggleDarkMode
           )}
         </div>
         <div className="flex items-center space-x-2">
-          {isSharedView && (
+          {isSharedView && allowDownload && (
             <button
               onClick={handleDownload}
               className={cn(
@@ -244,32 +246,52 @@ export function Viewer({ file, deletedPages, onClose, isDarkMode, toggleDarkMode
               <Download className={cn("w-5 h-5", isGeneratingPdf && "animate-pulse")} />
             </button>
           )}
-          <button
-            onClick={toggleDarkMode}
-            className={cn(
-              "p-2 rounded-full transition-colors",
-              isFullscreen 
-                ? "text-white hover:bg-white/20" 
-                : "text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800"
-            )}
-            title="Toggle Dark Mode"
-          >
-            {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-          </button>
-          <button
-            onClick={toggleFullscreen}
-            className={cn(
-              "p-2 rounded-full transition-colors",
-              isFullscreen 
-                ? "text-white hover:bg-white/20" 
-                : "text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800"
-            )}
-            title="Toggle Fullscreen"
-          >
-            {isFullscreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
-          </button>
+          <div className="relative">
+            <button
+              onClick={toggleDarkMode}
+              className={cn(
+                "p-2 rounded-full transition-colors",
+                isFullscreen 
+                  ? "text-white hover:bg-white/20" 
+                  : "text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800"
+              )}
+              title="Toggle Dark Mode"
+            >
+              {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            </button>
+          </div>
+          <div className="relative group/fullscreen">
+            <button
+              onClick={toggleFullscreen}
+              className={cn(
+                "p-2 rounded-full transition-colors relative z-10",
+                isFullscreen 
+                  ? "text-white hover:bg-white/20" 
+                  : "text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800"
+              )}
+              title="Toggle Fullscreen"
+            >
+              {isFullscreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
+            </button>
+          </div>
         </div>
       </div>
+
+      {isSharedView && !hasClickedStart && (
+        <div 
+          className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm cursor-pointer transition-opacity duration-300"
+          onClick={() => {
+             setHasClickedStart(true);
+             toggleFullscreen();
+          }}
+        >
+           <div className="bg-white/10 p-6 rounded-2xl border border-white/20 text-center shadow-2xl backdrop-blur-md">
+              <Maximize2 className="w-12 h-12 text-white mx-auto mb-4 animate-bounce" />
+              <h2 className="text-2xl font-bold text-white mb-2">Start Presentation</h2>
+              <p className="text-white/70">Click anywhere to load presentation in full screen</p>
+           </div>
+        </div>
+      )}
 
       {/* Main viewer area */}
       <div className="flex-1 w-full flex items-center justify-center overflow-hidden relative group py-8 px-4 md:px-16">

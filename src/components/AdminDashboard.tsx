@@ -5,6 +5,7 @@ import { Trash2, Edit2, Copy, LogOut, Check, ExternalLink, Loader2 } from 'lucid
 interface AdminDashboardProps {
   onLogout: () => void;
   onEditProject: (projectId: string) => void;
+  onUploadNew: () => void;
 }
 
 interface ProjectData {
@@ -13,7 +14,7 @@ interface ProjectData {
   created_at: string;
 }
 
-export function AdminDashboard({ onLogout, onEditProject }: AdminDashboardProps) {
+export function AdminDashboard({ onLogout, onEditProject, onUploadNew }: AdminDashboardProps) {
   const [projects, setProjects] = useState<ProjectData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -50,7 +51,7 @@ export function AdminDashboard({ onLogout, onEditProject }: AdminDashboardProps)
     if (!window.confirm("Are you sure you want to permanently delete this project? This will erase it from the database.")) return;
     
     try {
-      // Get the file_path to delete the file as well
+      // Get the file_path to delete the file as well. Do not throw if it fails (e.g. old records).
       const { data: pData } = await supabase.from('projects').select('file_path').eq('id', id).single();
       
       // Delete from Postgres
@@ -64,8 +65,8 @@ export function AdminDashboard({ onLogout, onEditProject }: AdminDashboardProps)
 
       setProjects(prev => prev.filter(p => p.id !== id));
     } catch (err: any) {
-        console.error(err);
-        alert("Failed to delete. You need to enable the 'Allow Public Delete' policies in Supabase SQL.");
+        console.error("Delete Error:", err);
+        alert(`Failed to delete: ${err.message || JSON.stringify(err)}\n\nIf it's a policy issue, ensure policies are set correctly in Supabase.`);
     }
   };
 
@@ -76,13 +77,21 @@ export function AdminDashboard({ onLogout, onEditProject }: AdminDashboardProps)
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Admin Dashboard</h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Manage your presentations and share links.</p>
         </div>
-        <button 
-          onClick={onLogout}
-          className="flex items-center px-4 py-2 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/40 rounded-xl transition"
-        >
-          <LogOut className="w-4 h-4 mr-2" />
-          Logout
-        </button>
+        <div className="flex items-center space-x-3">
+          <button 
+            onClick={onUploadNew}
+            className="flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition"
+          >
+            Upload Presentation
+          </button>
+          <button 
+            onClick={onLogout}
+            className="flex items-center px-4 py-2 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/40 rounded-xl transition"
+          >
+            <LogOut className="w-4 h-4 mr-2" />
+            Logout
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-auto p-6">
