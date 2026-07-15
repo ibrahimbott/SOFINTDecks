@@ -135,10 +135,10 @@ export function Editor({ file, onPresent, onCancel, initialDeletedPages, existin
     setShareUrl(null);
     try {
       let projectId = existingProjectId;
+      const cleanTitle = title.trim() || 'Untitled';
 
       if (existingProjectId) {
          // UPDATE Mode (Admin edit)
-         const cleanTitle = title.trim() || 'Untitled';
          const { error: updateError } = await supabase
             .from('projects')
             .update({
@@ -161,7 +161,6 @@ export function Editor({ file, onPresent, onCancel, initialDeletedPages, existin
          if (uploadError) throw uploadError;
 
          const deletedArray = Array.from(deletedPages);
-         const cleanTitle = title.trim() || 'Untitled';
          const { data: projectData, error: insertError } = await supabase
            .from('projects')
            .insert({
